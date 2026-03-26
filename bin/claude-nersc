@@ -1,0 +1,120 @@
+#!/bin/bash
+set -euo pipefail
+
+# ─── Defaults ────────────────────────────────────────────────────────────────
+ACCOUNT=""
+TIME="1:00:00"
+CONSTRAINT="cpu"
+GPUS=""
+WORKSPACE="$(pwd)"
+IMAGE_AGENT="docker.io/nollde24/claude-nersc:latest"
+IMAGE_PROXY="docker.io/nollde24/claude-nersc-proxy:latest"
+
+# ─── Usage ───────────────────────────────────────────────────────────────────
+usage() {
+    cat << 'EOF'
+claude-nersc — Launch Claude Code in a sandboxed container on NERSC Perlmutter
+
+Usage:
+  claude-nersc -A <account> [options]
+
+Options:
+  -A, --account ACCOUNT   NERSC account/project (required)
+  -t, --time TIME         Time limit (default: 1:00:00)
+  -C, --constraint TYPE   Node type: cpu or gpu (default: cpu)
+  -g, --gpus N            Number of GPUs (implies --constraint gpu)
+  -w, --workspace DIR     Workspace directory to mount (default: current dir)
+      --agent-image IMG   Override agent image
+      --proxy-image IMG   Override proxy image
+  -h, --help              Show this help
+
+Examples:
+  claude-nersc -A m3246
+  claude-nersc -A m3246 -t 2:00:00 -C gpu -g 1
+  claude-nersc -A m3246 -w ~/my-project
+EOF
+    exit 0
+}
+
+# ─── Parse arguments ─────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -A|--account)     ACCOUNT="$2";      shift 2 ;;
+        -t|--time)        TIME="$2";         shift 2 ;;
+        -C|--constraint)  CONSTRAINT="$2";   shift 2 ;;
+        -g|--gpus)        GPUS="$2"; CONSTRAINT="gpu"; shift 2 ;;
+        -w|--workspace)   WORKSPACE="$2";    shift 2 ;;
+        --agent-image)    IMAGE_AGENT="$2";  shift 2 ;;
+        --proxy-image)    IMAGE_PROXY="$2";  shift 2 ;;
+        -h|--help)        usage ;;
+        *)                echo "Unknown option: $1"; echo; usage ;;
+    esac
+done
+
+if [ -z "$ACCOUNT" ]; then
+    echo "ERROR: --account / -A is required"
+    echo
+    usage
+fi
+
+WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+
+# ─── If not in a Slurm allocation, request one and re-exec ──────────────────
+if [ -z "${SLURM_JOB_ID:-}" ]; then
+    SALLOC_ARGS=(
+        --nodes 1
+        --qos interactive
+        --time "$TIME"
+        --constraint "$CONSTRAINT"
+        --account "$ACCOUNT"
+    )
+    [ -n "$GPUS" ] && SALLOC_ARGS+=(--gpus "$GPUS")
+
+    echo "Requesting compute node: ${SALLOC_ARGS[*]}"
+    exec salloc "${SALLOC_ARGS[@]}" \
+        "$0" -A "$ACCOUNT" -t "$TIME" -C "$CONSTRAINT" \
+        ${GPUS:+-g "$GPUS"} \
+        -w "$WORKSPACE" \
+        --agent-image "$IMAGE_AGENT" \
+        --proxy-image "$IMAGE_PROXY"
+fi
+
+# ─── We have an allocation — start containers ───────────────────────────────
+PROXY_NAME="claude-nersc-proxy-$$"
+
+cleanup() {
+    echo "Cleaning up..."
+    podman-hpc stop "$PROXY_NAME" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo "Starting Squid proxy..."
+podman-hpc run -d --rm --name "$PROXY_NAME" \
+    "$IMAGE_PROXY" \
+    squid -N -f /etc/squid/squid.conf
+
+# Wait for Squid to be ready (up to 15s)
+echo "Waiting for Squid proxy..."
+for i in $(seq 1 30); do
+    if podman-hpc ps --format '{{.Names}}' | grep -q "$PROXY_NAME"; then
+        echo "Squid proxy ready."
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        echo "ERROR: Squid proxy failed to start within 15s"
+        podman-hpc logs "$PROXY_NAME" 2>/dev/null || true
+        exit 1
+    fi
+    sleep 0.5
+done
+echo "Launching Claude agent (workspace: $WORKSPACE)..."
+echo "───────────────────────────────────────────────────"
+
+podman-hpc run -it --rm \
+    --user root \
+    --network=host \
+    -e SQUID_PROXY=127.0.0.1:3128 \
+    -v "$WORKSPACE":/workspace \
+    "$IMAGE_AGENT"
+
+echo "Session ended."

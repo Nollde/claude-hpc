@@ -1,0 +1,45 @@
+{
+  "name": "Claude NERSC (local)",
+  "build": {
+    "dockerfile": "../agent/Dockerfile",
+    "context": "..",
+    "args": {
+      "TZ": "${localEnv:TZ:America/Los_Angeles}",
+      "GIT_DELTA_VERSION": "0.18.2"
+    }
+  },
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "bash",
+            "args": ["--login"],
+            "icon": "terminal-bash"
+          }
+        }
+      }
+    }
+  },
+  "remoteUser": "researcher",
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CLAUDE_CONFIG_DIR": "/home/researcher/.claude"
+  },
+  "mounts": [
+    "source=claude-nersc-config-${devcontainerId},target=/home/researcher/.claude,type=volume"
+  ],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "waitFor": "postStartCommand"
+}
