@@ -112,8 +112,9 @@ echo "Launching Claude agent (workspace: $WORKSPACE)..."
 echo "───────────────────────────────────────────────────"
 
 podman-hpc run -it --rm \
-    --user root \
     --network=host \
+    ${GPUS:+--gpu} \
+    --userns=keep-id:uid=1000,gid=1000 \
     -e SQUID_PROXY=127.0.0.1:3128 \
     -v "$WORKSPACE":/workspace \
     "$IMAGE_AGENT"
