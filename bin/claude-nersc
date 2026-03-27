@@ -89,12 +89,7 @@ if [ -z "${SLURM_JOB_ID:-}" ]; then
         --account "$ACCOUNT"
     )
     if [ -n "$GPUS" ]; then
-        SALLOC_ARGS+=(
-            --gpus "$GPUS"
-            --ntasks-per-node="$GPUS"
-            --gpus-per-task=1
-            --gpu-bind=none
-        )
+        SALLOC_ARGS+=(--gpus "$GPUS")
     fi
 
     echo "Requesting compute node: ${SALLOC_ARGS[*]}"
@@ -139,7 +134,7 @@ fi
 echo "Launching Claude agent (workspace: $WORKSPACE)..."
 echo "───────────────────────────────────────────────────"
 
-srun --overlap --ntasks=1 ${GPUS:+--gpus-per-task=$GPUS --gpu-bind=none} --export=ALL --pty \
+srun --overlap --ntasks=1 ${GPUS:+--gpus=$GPUS --gpu-bind=none} --export=ALL --pty \
     podman-hpc run -it --rm \
     --network=host \
     ${GPUS:+--gpu} \
