@@ -29,7 +29,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 # Claude Code — install globally so it works for any user
 RUN curl -fsSL https://claude.ai/install.sh | bash && \
-    mv /root/.local/bin/claude /usr/local/bin/claude && \
+    cp /root/.local/bin/claude /usr/local/bin/claude && \
     chmod 755 /usr/local/bin/claude
 
 # Shell configuration — loaded for all users (root, researcher, or mapped HPC user)
