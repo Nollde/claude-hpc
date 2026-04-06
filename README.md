@@ -86,7 +86,7 @@ restarts — but is specific to each workspace.
 **4. Launch**:
 
 ```bash
-claude-hpc -A m3246
+claude-hpc -A YOUR_SLURM_PROJECT_ID
 ```
 
 #### Launcher options
