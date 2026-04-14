@@ -3,6 +3,7 @@
 Sandboxed [Claude Code](https://docs.anthropic.com/en/docs/claude-code) environment for HPC 
 (especially NERSC Perlmutter) and local Docker. Network-restricted via domain whitelist — only approved
 services (Anthropic API, GitHub, PyPI, HEP data sources, etc.) are reachable.
+Inspired by Claude Code's [Development Containers](https://code.claude.com/docs/en/devcontainer).
 
 ## How it works
 
